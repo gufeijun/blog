@@ -163,14 +163,6 @@ func getKV(s string) (key string, value string) {
 	return strings.TrimSpace(ss[0]), strings.Trim(ss[1], `"`)
 }
 
-func getValue(s string) string {
-	ss := strings.Split(s, "=")
-	if len(ss) != 2 {
-		return ""
-	}
-	return strings.Trim(ss[1], `"`)
-}
-
 func (p *Part) Close() error {
 	if p.closed {
 		return nil
