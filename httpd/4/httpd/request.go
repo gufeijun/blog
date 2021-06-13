@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"mime/multipart"
 	"net/url"
 	"strconv"
 	"strings"
@@ -27,7 +26,6 @@ type Request struct {
 	cookies       map[string]string
 	queryString   map[string]string
 	postForm      map[string]string
-	multipartForm *multipart.Form
 
 	contentType    string
 	boundary       string
