@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+//https://datatracker.ietf.org/doc/html/rfc2046#section-5.1.1
+
 //multipart/form-data example:
 //POST / HTTP/1.1
 //[[ Less interesting headers ... ]]
@@ -201,5 +203,6 @@ func (p *Part) Close() error {
 		return nil
 	}
 	_, err := io.Copy(ioutil.Discard, p)
+	p.closed = true
 	return err
 }

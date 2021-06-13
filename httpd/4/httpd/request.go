@@ -208,10 +208,13 @@ func (r *Request) parseContentType() {
 	if len(ss) < 2 || strings.TrimSpace(ss[0]) != "boundary" {
 		return
 	}
-	r.contentType, r.boundary = ct[:index], ss[1]
+	r.contentType, r.boundary = ct[:index], strings.Trim(ss[1],`"`)
 	return
 }
 
-func (r *Request) MultipartReader()*MultipartReader{
-	return NewMultipartReader(r.Body,r.boundary)
+func (r *Request) MultipartReader()(*MultipartReader,error){
+	if r.boundary==""{
+		return nil,errors.New("no boundary detected")
+	}
+	return NewMultipartReader(r.Body,r.boundary),nil
 }

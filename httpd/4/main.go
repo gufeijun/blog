@@ -4,44 +4,46 @@ import (
 	"example/httpd"
 	"fmt"
 	"io"
+	"log"
 	"os"
 )
 
 type myHandler struct{}
 
-//https://datatracker.ietf.org/doc/html/rfc2046#section-5.1.1
-
 func (*myHandler) ServeHTTP(w httpd.ResponseWriter, r *httpd.Request) {
-	mr := r.MultipartReader()
+	mr, err := r.MultipartReader()
+	if err != nil {
+		log.Println(err)
+		return
+	}
 	var part *httpd.Part
-	var err error
-	label:
+label:
 	for {
-		part,err = mr.NextPart()
-		if err!=nil{
+		part, err = mr.NextPart()
+		if err != nil {
 			break
 		}
 		switch part.FileName() {
 		case "":
-			fmt.Printf("FormName=%s, FormData:\n",part.FormName())
-			if _,err=io.Copy(os.Stdout,part);err!=nil{
+			fmt.Printf("FormName=%s, FormData:\n", part.FormName())
+			if _, err = io.Copy(os.Stdout, part); err != nil {
 				break label
 			}
 			fmt.Println()
 		default:
-			fmt.Printf("FormName=%s, FileName=%s\n",part.FormName(),part.FileName())
+			fmt.Printf("FormName=%s, FileName=%s\n", part.FormName(), part.FileName())
 			var file *os.File
-			if file,err=os.Create(part.FileName());err!=nil{
-				break
+			if file, err = os.Create(part.FileName()); err != nil {
+				break label
 			}
-			if _,err=io.Copy(file,part);err!=nil{
+			if _, err = io.Copy(file, part); err != nil {
 				file.Close()
-				break
+				break label
 			}
 			file.Close()
 		}
 	}
-	if err!=io.EOF{
+	if err != io.EOF {
 		fmt.Println(err)
 	}
 	io.WriteString(w, "HTTP/1.1 200 OK\r\n")
