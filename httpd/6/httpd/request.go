@@ -22,9 +22,16 @@ type Request struct {
 	RequestURI string //字符串形式的url
 
 	//私有字段
-	conn        *conn
-	cookies     map[string]string
-	queryString map[string]string
+	conn          *conn
+	cookies       map[string]string
+	queryString   map[string]string
+	postForm      map[string]string
+	multipartForm *MultipartForm
+
+	contentType    string
+	boundary       string
+	haveParsedForm bool
+	parseFormErr   error
 }
 
 func readRequest(c *conn) (r *Request, err error) {
@@ -54,6 +61,7 @@ func readRequest(c *conn) (r *Request, err error) {
 	r.conn.lr.N = noLimit
 	//设置body
 	r.setupBody()
+	r.parseContentType()
 	return r, nil
 }
 
@@ -61,17 +69,17 @@ func readRequest(c *conn) (r *Request, err error) {
 func readLine(bufr *bufio.Reader) ([]byte, error) {
 	p, isPrefix, err := bufr.ReadLine()
 	if err != nil {
-		return nil, err
+		return p, err
 	}
 	var l []byte
 	for isPrefix {
 		l, isPrefix, err = bufr.ReadLine()
 		if err != nil {
-			return nil, err
+			break
 		}
 		p = append(p, l...)
 	}
-	return p, nil
+	return p, err
 }
 
 func (r *Request) parseQuery() {
@@ -163,7 +171,7 @@ func (r *Request) chunked() bool {
 func (r *Request) setupBody() {
 	if r.Method != "POST" && r.Method != "PUT" {
 		r.Body = &eofReader{} //POST和PUT以外的方法不允许设置报文主体
-	}else if r.chunked(){
+	} else if r.chunked() {
 		r.Body = &chunkReader{bufr: r.conn.bufr}
 	} else if cl := r.Header.Get("Content-Length"); cl != "" {
 		//如果设置了Content-Length
@@ -173,16 +181,112 @@ func (r *Request) setupBody() {
 			return
 		}
 		r.Body = io.LimitReader(r.conn.bufr, contentLength)
-	}else{
+	} else {
 		r.Body = &eofReader{}
 	}
 }
 
-func (r *Request) finishRequest() (err error){
+func (r *Request) finishRequest() (err error) {
 	//将缓存中的剩余的数据发送到rwc中
-	if err=r.conn.bufw.Flush();err!=nil{
+	if err = r.conn.bufw.Flush(); err != nil {
 		return
 	}
-	_,err = io.Copy(ioutil.Discard,r.Body)
+	_, err = io.Copy(ioutil.Discard, r.Body)
+	if r.multipartForm!=nil{
+		r.multipartForm.RemoveAll()
+	}
 	return err
+}
+
+func (r *Request) parseContentType() {
+	ct := r.Header.Get("Content-Type")
+	//Content-Type: multipart/form-data; boundary=------974767299852498929531610575
+	//Content-Type: application/x-www-form-urlencoded
+	index := strings.IndexByte(ct, ';')
+	if index == -1 {
+		r.contentType = ct
+		return
+	}
+	if index == len(ct)-1 {
+		return
+	}
+	ss := strings.Split(ct[index+1:], "=")
+	if len(ss) < 2 || strings.TrimSpace(ss[0]) != "boundary" {
+		return
+	}
+	r.contentType, r.boundary = ct[:index], strings.Trim(ss[1],`"`)
+	return
+}
+
+func (r *Request) MultipartReader()(*MultipartReader,error){
+	if r.boundary==""{
+		return nil,errors.New("no boundary detected")
+	}
+	return NewMultipartReader(r.Body,r.boundary),nil
+}
+
+func (r *Request) PostForm(name string) string {
+	if !r.haveParsedForm {
+		r.parseFormErr = r.parseForm()
+	}
+	if r.parseFormErr != nil || r.postForm == nil {
+		return ""
+	}
+	return r.postForm[name]
+}
+
+func (r *Request) MultipartForm() (*MultipartForm, error) {
+	if !r.haveParsedForm {
+		if err := r.parseForm(); err != nil {
+			r.parseFormErr = err
+			return nil, err
+		}
+	}
+	return r.multipartForm, r.parseFormErr
+}
+
+func (r *Request) parseForm() error {
+	if r.Method != "POST" && r.Method != "PUT" {
+		return errors.New("missing form body")
+	}
+	r.haveParsedForm = true
+	switch r.contentType {
+	case "application/x-www-form-urlencoded":
+		return r.parsePostForm()
+	case "multipart/form-data":
+		return r.parseMultipartForm()
+	default:
+		return errors.New("unsupported form type")
+	}
+}
+
+func (r *Request) parsePostForm() error {
+	data, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	r.postForm = parseQuery(string(data))
+	return nil
+}
+
+func (r *Request) parseMultipartForm() (err error) {
+	mr,err := r.MultipartReader()
+	if err!=nil{
+		return
+	}
+	r.multipartForm,err = mr.ReadForm()
+	r.postForm = r.multipartForm.Value
+	return
+}
+
+func (r *Request) FormFile(key string)(fh* FileHeader,err error){
+	mf,err := r.MultipartForm()
+	if err!=nil{
+		return
+	}
+	fh,ok:=mf.File[key]
+	if !ok{
+		return nil,errors.New("http: missing multipart file")
+	}
+	return
 }

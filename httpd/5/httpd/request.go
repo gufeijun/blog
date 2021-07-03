@@ -186,11 +186,15 @@ func (r *Request) setupBody() {
 	}
 }
 
-func (r *Request) finishRequest() error {
-	_, err := io.Copy(ioutil.Discard, r.Body)
+func (r *Request) finishRequest() (err error) {
 	if r.multipartForm!=nil{
 		r.multipartForm.RemoveAll()
 	}
+	//将缓存中的剩余的数据发送到rwc中
+	if err = r.conn.bufw.Flush(); err != nil {
+		return
+	}
+	_, err = io.Copy(ioutil.Discard, r.Body)
 	return err
 }
 

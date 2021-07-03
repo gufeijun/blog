@@ -44,10 +44,6 @@ func (c *conn) serve(){
 		}
 		res:=c.setupResponse()
 		c.svr.Handler.ServeHTTP(res,req)
-		//将缓存中的剩余的数据发送到rwc中
-		if err=c.bufw.Flush();err!=nil{
-			return
-		}
 		if err=req.finishRequest();err!=nil{
 			return
 		}
