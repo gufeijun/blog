@@ -42,8 +42,8 @@ func (c *conn) serve(){
 			handleErr(err,c)
 			return
 		}
-		res:=c.setupResponse()
-		c.svr.Handler.ServeHTTP(res,req)
+		resp:=c.setupResponse()
+		c.svr.Handler.ServeHTTP(resp,req)
 		//将缓存中的剩余的数据发送到rwc中
 		if err=c.bufw.Flush();err!=nil{
 			return
@@ -59,6 +59,6 @@ func (c *conn) setupResponse()*response{
 	return nil
 }
 
-func (c *conn) close(){}
+func (c *conn) close(){ c.rwc.Close()}
 
 func handleErr(err error,c *conn){fmt.Println(err)}

@@ -3,7 +3,10 @@ package httpd
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io"
+	"net/http"
+	"strconv"
 )
 
 type chunkReader struct {
@@ -86,5 +89,70 @@ func (cw *chunkReader) getChunkSize() (chunkSize int, err error) {
 			return 0, errors.New("illegal hex number")
 		}
 	}
+	return
+}
+
+type chunkWriter struct {
+	resp  *response
+	wrote bool
+}
+
+//response的bufw是chunkWriter的封装，对response的写实际上是对bufw的写
+//因此只有在handler结束后调用bufw.Flush，或者在Handler结束前累计写入超过4096B的数据，
+//才会触发chunkWriter的Write方法。我们通过handlerDone来区分这两种情况。
+func (cw *chunkWriter) Write(p []byte) (n int, err error) {
+	if !cw.wrote {
+		cw.finalizeHeader(p)
+		if err = cw.writeHeader(); err != nil {
+			return
+		}
+		cw.wrote = true
+	}
+	bufw := cw.resp.c.bufw
+	//当Write数据超过缓存容量时，利用chunk编码传输
+	if cw.resp.chunking {
+		_,err = fmt.Fprintf(bufw,"%x\r\n",len(p))
+		if err!=nil{
+			return
+		}
+	}
+	n,err = bufw.Write(p)
+	if err == nil && cw.resp.chunking{
+		_,err=bufw.WriteString("\r\n")
+	}
+	return n,err
+}
+
+func (cw *chunkWriter) finalizeHeader(p []byte) {
+	header := cw.resp.header
+	if header.Get("Content-Type") == "" {
+		header.Set("Content-Type", http.DetectContentType(p))
+	}
+	if header.Get("Content-Length") == "" && header.Get("Transfer-Encoding") == "" {
+		if cw.resp.handlerDone {
+			buffered := cw.resp.bufw.Buffered()
+			header.Set("Content-Length", strconv.Itoa(buffered))
+		} else {
+			cw.resp.chunking = true
+			header.Set("Transfer-Encoding", "chunked")
+		}
+	}
+}
+
+func (cw *chunkWriter) writeHeader() (err error) {
+	codeString := strconv.Itoa(cw.resp.statusCode)
+	statusLine := cw.resp.req.Proto + " " + codeString + " " + statusText[cw.resp.statusCode] + "\r\n"
+	bufw := cw.resp.c.bufw
+	_, err = bufw.WriteString(statusLine)
+	if err != nil {
+		return
+	}
+	for key, value := range cw.resp.header {
+		_, err = bufw.WriteString(key + ": " + value[0] + "\r\n")
+		if err != nil {
+			return
+		}
+	}
+	_, err = bufw.WriteString("\r\n")
 	return
 }

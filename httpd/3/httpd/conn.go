@@ -42,8 +42,8 @@ func (c *conn) serve(){
 			handleErr(err,c)
 			return
 		}
-		res:=c.setupResponse()
-		c.svr.Handler.ServeHTTP(res,req)
+		resp:=c.setupResponse()
+		c.svr.Handler.ServeHTTP(resp,req)
 		if err=req.finishRequest();err!=nil{
 			return
 		}
@@ -58,6 +58,6 @@ func (c *conn) setupResponse()*response{
 	return setupResponse(c)
 }
 
-func (c *conn) close(){}
+func (c *conn) close(){ c.rwc.Close()}
 
 func handleErr(err error,c *conn){fmt.Println("handleErr:err=",err)}

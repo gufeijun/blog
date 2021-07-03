@@ -163,14 +163,14 @@ type eofReader struct{}
 
 func (er *eofReader) Read([]byte) (n int, err error) { return 0, io.EOF }
 
-type expectContinueReader struct{
+type expectContinueReader struct {
 	wroteContinue bool
-	r io.Reader
-	w *bufio.Writer
+	r             io.Reader
+	w             *bufio.Writer
 }
 
-func (er *expectContinueReader) Read(p []byte)(n int,err error){
-	if !er.wroteContinue{
+func (er *expectContinueReader) Read(p []byte) (n int, err error) {
+	if !er.wroteContinue {
 		er.w.WriteString("HTTP/1.1 100 Continue\r\n\r\n")
 		er.w.Flush()
 		er.wroteContinue = true
@@ -184,7 +184,7 @@ func (r *Request) fixExpectContinueReader() {
 	}
 	r.Body = &expectContinueReader{
 		r: r.Body,
-		w:r.conn.bufw,
+		w: r.conn.bufw,
 	}
 }
 
@@ -213,15 +213,27 @@ func (r *Request) setupBody() {
 	}
 }
 
-func (r *Request) finishRequest() (err error) {
+func (r *Request) finishRequest(resp *response) (err error) {
+	if r.multipartForm != nil {
+		r.multipartForm.RemoveAll()
+	}
+	resp.handlerDone = true
+	if err = resp.bufw.Flush(); err != nil {
+		return
+	}
+	//将最后的0\r\n\r\n传输
+	if resp.chunking{
+		_,err = resp.c.bufw.WriteString("0\r\n\r\n")
+		if err!=nil{
+			return
+		}
+	}
+
 	//将缓存中的剩余的数据发送到rwc中
 	if err = r.conn.bufw.Flush(); err != nil {
 		return
 	}
 	_, err = io.Copy(ioutil.Discard, r.Body)
-	if r.multipartForm!=nil{
-		r.multipartForm.RemoveAll()
-	}
 	return err
 }
 
@@ -241,15 +253,15 @@ func (r *Request) parseContentType() {
 	if len(ss) < 2 || strings.TrimSpace(ss[0]) != "boundary" {
 		return
 	}
-	r.contentType, r.boundary = ct[:index], strings.Trim(ss[1],`"`)
+	r.contentType, r.boundary = ct[:index], strings.Trim(ss[1], `"`)
 	return
 }
 
-func (r *Request) MultipartReader()(*MultipartReader,error){
-	if r.boundary==""{
-		return nil,errors.New("no boundary detected")
+func (r *Request) MultipartReader() (*MultipartReader, error) {
+	if r.boundary == "" {
+		return nil, errors.New("no boundary detected")
 	}
-	return NewMultipartReader(r.Body,r.boundary),nil
+	return NewMultipartReader(r.Body, r.boundary), nil
 }
 
 func (r *Request) PostForm(name string) string {
@@ -297,23 +309,23 @@ func (r *Request) parsePostForm() error {
 }
 
 func (r *Request) parseMultipartForm() (err error) {
-	mr,err := r.MultipartReader()
-	if err!=nil{
+	mr, err := r.MultipartReader()
+	if err != nil {
 		return
 	}
-	r.multipartForm,err = mr.ReadForm()
+	r.multipartForm, err = mr.ReadForm()
 	r.postForm = r.multipartForm.Value
 	return
 }
 
-func (r *Request) FormFile(key string)(fh* FileHeader,err error){
-	mf,err := r.MultipartForm()
-	if err!=nil{
+func (r *Request) FormFile(key string) (fh *FileHeader, err error) {
+	mf, err := r.MultipartForm()
+	if err != nil {
 		return
 	}
-	fh,ok:=mf.File[key]
-	if !ok{
-		return nil,errors.New("http: missing multipart file")
+	fh, ok := mf.File[key]
+	if !ok {
+		return nil, errors.New("http: missing multipart file")
 	}
 	return
 }

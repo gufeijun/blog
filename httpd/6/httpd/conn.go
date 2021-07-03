@@ -42,9 +42,12 @@ func (c *conn) serve() {
 			handleErr(err, c)
 			return
 		}
-		res := c.setupResponse()
-		c.svr.Handler.ServeHTTP(res, req)
-		if err = req.finishRequest(); err != nil {
+		resp := c.setupResponse(req)
+		c.svr.Handler.ServeHTTP(resp, req)
+		if err = req.finishRequest(resp); err != nil {
+			return
+		}
+		if resp.closeAfterReply{
 			return
 		}
 	}
@@ -54,10 +57,14 @@ func (c *conn) readRequest() (*Request, error) {
 	return readRequest(c)
 }
 
-func (c *conn) setupResponse() *response {
-	return setupResponse(c)
+func (c *conn) setupResponse(req *Request) *response {
+	return setupResponse(c,req)
 }
 
-func (c *conn) close() {}
+func (c *conn) close() {
+	c.rwc.Close()
+}
 
-func handleErr(err error, c *conn) { fmt.Println("handleErr:err=", err) }
+func handleErr(err error, c *conn) {
+	fmt.Println("handleErr:err=", err)
+}
