@@ -163,6 +163,31 @@ type eofReader struct{}
 
 func (er *eofReader) Read([]byte) (n int, err error) { return 0, io.EOF }
 
+type expectContinueReader struct{
+	wroteContinue bool
+	r io.Reader
+	w *bufio.Writer
+}
+
+func (er *expectContinueReader) Read(p []byte)(n int,err error){
+	if !er.wroteContinue{
+		er.w.WriteString("HTTP/1.1 100 Continue\r\n\r\n")
+		er.w.Flush()
+		er.wroteContinue = true
+	}
+	return er.r.Read(p)
+}
+
+func (r *Request) fixExpectContinueReader() {
+	if r.Header.Get("Expect") != "100-continue" {
+		return
+	}
+	r.Body = &expectContinueReader{
+		r: r.Body,
+		w:r.conn.bufw,
+	}
+}
+
 func (r *Request) chunked() bool {
 	te := r.Header.Get("Transfer-Encoding")
 	return te == "chunked"
@@ -173,6 +198,7 @@ func (r *Request) setupBody() {
 		r.Body = &eofReader{} //POST和PUT以外的方法不允许设置报文主体
 	} else if r.chunked() {
 		r.Body = &chunkReader{bufr: r.conn.bufr}
+		r.fixExpectContinueReader()
 	} else if cl := r.Header.Get("Content-Length"); cl != "" {
 		//如果设置了Content-Length
 		contentLength, err := strconv.ParseInt(cl, 10, 64)
@@ -181,6 +207,7 @@ func (r *Request) setupBody() {
 			return
 		}
 		r.Body = io.LimitReader(r.conn.bufr, contentLength)
+		r.fixExpectContinueReader()
 	} else {
 		r.Body = &eofReader{}
 	}
