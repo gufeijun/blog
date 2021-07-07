@@ -10,7 +10,7 @@ type response struct {
 
 	//是否已经调用过WriteHeader
 	wroteHeader bool
-	header Header
+	header      Header
 
 	//WriteHeader传入的状态码，默认为200
 	statusCode int
@@ -22,7 +22,7 @@ type response struct {
 
 	//it's a wrapper of chunkWriter
 	bufw *bufio.Writer
-	cw *chunkWriter
+	cw   *chunkWriter
 
 	req *Request
 
@@ -38,22 +38,22 @@ type ResponseWriter interface {
 	WriteHeader(statusCode int)
 }
 
-func setupResponse(c *conn,req *Request) *response {
-	resp:=&response{
-		c: c,
-		header: make(Header),
+func setupResponse(c *conn, req *Request) *response {
+	resp := &response{
+		c:          c,
+		header:     make(Header),
 		statusCode: 200,
-		req: req,
+		req:        req,
 	}
 	cw := &chunkWriter{resp: resp}
 	resp.cw = cw
-	resp.bufw = bufio.NewWriterSize(cw,4096)
-	var(
+	resp.bufw = bufio.NewWriterSize(cw, 4096)
+	var (
 		protoMinor int
 		protoMajor int
 	)
-	fmt.Sscanf(req.Proto,"HTTP/%d.%d",&protoMinor,&protoMajor)
-	if protoMajor<1 || protoMinor==1&&protoMajor==0 || req.Header.Get("Connection")=="close"{
+	fmt.Sscanf(req.Proto, "HTTP/%d.%d", &protoMinor, &protoMajor)
+	if protoMajor < 1 || protoMinor == 1 && protoMajor == 0 || req.Header.Get("Connection") == "close" {
 		resp.closeAfterReply = true
 	}
 	return resp
@@ -62,19 +62,19 @@ func setupResponse(c *conn,req *Request) *response {
 //写入流的顺序：response => (*response).bufw => chunkWriter
 // =>  (*response).(*conn).bufw => net.Conn
 func (w *response) Write(p []byte) (int, error) {
-	n,err:=w.bufw.Write(p)
-	if err!=nil{
+	n, err := w.bufw.Write(p)
+	if err != nil {
 		w.closeAfterReply = true
 	}
-	return n,err
+	return n, err
 }
 
-func (w *response) Header() Header{
+func (w *response) Header() Header {
 	return w.header
 }
 
-func (w *response) WriteHeader(statusCode int){
-	if w.wroteHeader{
+func (w *response) WriteHeader(statusCode int) {
+	if w.wroteHeader {
 		return
 	}
 	w.statusCode = statusCode

@@ -47,7 +47,7 @@ func (c *conn) serve() {
 		if err = req.finishRequest(resp); err != nil {
 			return
 		}
-		if resp.closeAfterReply{
+		if resp.closeAfterReply {
 			return
 		}
 	}
@@ -58,17 +58,16 @@ func (c *conn) readRequest() (*Request, error) {
 }
 
 func (c *conn) setupResponse(req *Request) *response {
-	return setupResponse(c,req)
+	return setupResponse(c, req)
 }
 
 func (c *conn) close() {
 	c.rwc.Close()
 }
 
-
-func handleErr(err error,c *conn){
-	if err == io.EOF{
+func handleErr(err error, c *conn) {
+	if err == io.EOF {
 		return
 	}
-	fmt.Println("handleErr:err=",err)
+	fmt.Println("handleErr:err=", err)
 }

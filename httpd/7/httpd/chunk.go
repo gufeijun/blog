@@ -111,16 +111,16 @@ func (cw *chunkWriter) Write(p []byte) (n int, err error) {
 	bufw := cw.resp.c.bufw
 	//当Write数据超过缓存容量时，利用chunk编码传输
 	if cw.resp.chunking {
-		_,err = fmt.Fprintf(bufw,"%x\r\n",len(p))
-		if err!=nil{
+		_, err = fmt.Fprintf(bufw, "%x\r\n", len(p))
+		if err != nil {
 			return
 		}
 	}
-	n,err = bufw.Write(p)
-	if err == nil && cw.resp.chunking{
-		_,err=bufw.WriteString("\r\n")
+	n, err = bufw.Write(p)
+	if err == nil && cw.resp.chunking {
+		_, err = bufw.WriteString("\r\n")
 	}
-	return n,err
+	return n, err
 }
 
 func (cw *chunkWriter) finalizeHeader(p []byte) {
@@ -138,7 +138,7 @@ func (cw *chunkWriter) finalizeHeader(p []byte) {
 		}
 		return
 	}
-	if header.Get("Transfer-Encoding") == "chunked"{
+	if header.Get("Transfer-Encoding") == "chunked" {
 		cw.resp.chunking = true
 	}
 }

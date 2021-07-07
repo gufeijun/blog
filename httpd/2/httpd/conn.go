@@ -61,4 +61,9 @@ func (c *conn) setupResponse()*response{
 
 func (c *conn) close(){ c.rwc.Close()}
 
-func handleErr(err error,c *conn){fmt.Println("handleErr:err=",err)}
+func handleErr(err error,c *conn){
+	if err == io.EOF{
+		return
+	}
+	fmt.Println("handleErr:err=",err)
+}

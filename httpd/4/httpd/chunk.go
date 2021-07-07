@@ -40,7 +40,7 @@ func (cw *chunkReader) Read(p []byte) (n int, err error) {
 		if err = cw.discardCRLF(); err != nil {
 			return
 		}
-		//获取当前块中chunk data的长度
+		//获取下一块中chunk data的长度
 		cw.n, err = cw.getChunkSize()
 		if err != nil {
 			return
