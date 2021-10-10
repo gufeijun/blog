@@ -14,55 +14,43 @@ type chunkReader struct {
 	n    int
 	bufr *bufio.Reader
 	//利用done来记录报文主体是否读取完毕
-	done            bool
-	crlf            [2]byte //用来读取\r\n
-	haveDiscardCRLF bool
+	done bool
+	crlf [2]byte //用来读取\r\n
 }
 
 func (cw *chunkReader) Read(p []byte) (n int, err error) {
 	if cw.done {
 		return 0, io.EOF
 	}
-	var nn int
-	lenP := len(p)
-	for n < lenP {
-		//如果当前块剩余的数据大于等于p的长度
-		if len(p) <= cw.n {
-			nn, err = cw.bufr.Read(p)
-			cw.n -= nn
-			return nn, err
-		}
-		//如果当前块剩余的数据不够p的长度
-		_, err = io.ReadFull(cw.bufr, p[:cw.n])
-		if err != nil {
-			return
-		}
-		n += cw.n
-		p = p[cw.n:]
-		//将\r\n从流中消费掉
-		if err = cw.discardCRLF(); err != nil {
-			return
-		}
-		//获取下一前块中chunk data的长度
+	if cw.n == 0 {
 		cw.n, err = cw.getChunkSize()
 		if err != nil {
 			return
 		}
-		if cw.n == 0 {
-			cw.done = true
-			err = cw.discardCRLF()
-			return
-		}
+	}
+	if cw.n == 0 {
+		cw.done = true
+		err = cw.discardCRLF()
+		return
+	}
+
+	//如果当前块剩余的数据大于等于p的长度
+	if len(p) <= cw.n {
+		n, err = cw.bufr.Read(p)
+		cw.n -= n
+		return n, err
+	}
+	//如果当前块剩余的数据不够p的长度
+	n, _ = io.ReadFull(cw.bufr, p[:cw.n])
+	cw.n = 0
+	//将\r\n从流中消费掉
+	if err = cw.discardCRLF(); err != nil {
+		return
 	}
 	return
 }
 
 func (cw *chunkReader) discardCRLF() (err error) {
-	//第一次读chunkSize之前不需要舍弃\r\n
-	if !cw.haveDiscardCRLF {
-		cw.haveDiscardCRLF = true
-		return
-	}
 	if _, err = io.ReadFull(cw.bufr, cw.crlf[:]); err == nil {
 		if cw.crlf[0] != '\r' || cw.crlf[1] != '\n' {
 			return errors.New("unsupported encoding format of chunk")
@@ -111,16 +99,16 @@ func (cw *chunkWriter) Write(p []byte) (n int, err error) {
 	bufw := cw.resp.c.bufw
 	//当Write数据超过缓存容量时，利用chunk编码传输
 	if cw.resp.chunking {
-		_,err = fmt.Fprintf(bufw,"%x\r\n",len(p))
-		if err!=nil{
+		_, err = fmt.Fprintf(bufw, "%x\r\n", len(p))
+		if err != nil {
 			return
 		}
 	}
-	n,err = bufw.Write(p)
-	if err == nil && cw.resp.chunking{
-		_,err=bufw.WriteString("\r\n")
+	n, err = bufw.Write(p)
+	if err == nil && cw.resp.chunking {
+		_, err = bufw.WriteString("\r\n")
 	}
-	return n,err
+	return n, err
 }
 
 func (cw *chunkWriter) finalizeHeader(p []byte) {
@@ -138,7 +126,7 @@ func (cw *chunkWriter) finalizeHeader(p []byte) {
 		}
 		return
 	}
-	if header.Get("Transfer-Encoding") == "chunked"{
+	if header.Get("Transfer-Encoding") == "chunked" {
 		cw.resp.chunking = true
 	}
 }
