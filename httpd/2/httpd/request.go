@@ -80,7 +80,7 @@ func parseQuery(RawQuery string) map[string]string {
 	parts := strings.Split(RawQuery, "&")
 	queries := make(map[string]string, len(parts))
 	for _, part := range parts {
-		index := strings.IndexByte(part, '=')
+		index := strings.IndexRune(part, '=')
 		if index == -1 || index == len(part)-1 {
 			continue
 		}
